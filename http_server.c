@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>//close
+#include <fcntl.h>//open
+#include <sys/stat.h>
 
 
 int main(void){
@@ -41,32 +44,46 @@ int main(void){
     close(rsock);
     return -1;
   }
+  int fd = open("image.jpg", O_RDONLY);
+  if(fd<0){
+    fprintf(stderr, "画像ファイルを開けません : open\n");
+    return -1;
+  }
+  struct stat stbuf;
+  if (fstat(fd, &stbuf)<0){
+    fprintf(stderr, "ファイル情報の取得に失敗しました : fstat\n");
+    return -1;
+  }
+  size_t image_size = stbuf.st_size;
+  char *image_data = (char *)malloc(sizeof(char)* image_size);
+  ssize_t n = read(fd,image_data,image_size);
+  if(n !=image_size){
+    fprintf(stderr, "画像ファイルの読み込みに失敗しました: read\n");
+    return -1;
+  }
+  close(fd);
 
   memset(buf, 0, sizeof(buf));
-	snprintf(buf, sizeof(buf),
-			"HTTP/1.1 200 OK\r\n"
-			"\r\n"
-			"HELLO World!\r\n"
-			"This is first http server. \r\n"
-      );
+  snprintf(buf, sizeof(buf),
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: image/jpeg\r\n"
+      "Content-Length: %zd\r\n"
+      "\r\n", image_size);
 
   while(1){
     len = sizeof(client);
     wsock = accept(rsock, (struct sockaddr *)&client, &len); 
-    if (ret < 0){
+    if (wsock < 0){
       fprintf(stderr, "ソケットを受信できません : accept.\n");
       break;
     }
-
     memset(inbuf, 0, sizeof(inbuf));
-    recv(wsock, inbuf,sizeof(inbuf), 0);
-    send(wsock, buf, (int)strlen(buf), 0);
-
+    recv(wsock, inbuf, sizeof(inbuf),0);
+    send(wsock, buf, strlen(buf), 0);
+    send(wsock, image_data, image_size, 0);
     close(wsock);
   }
-
   close(rsock);
-
   return 0;
 }
 
